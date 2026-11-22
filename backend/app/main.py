@@ -19,10 +19,15 @@ from app.api.dashboard import router as dashboard_router
 from app.db.seed_data import seed_database
 
 # Ensure tables and storage exist
-Base.metadata.create_all(bind=engine)
-os.makedirs(settings.STORAGE_LOCAL_DIR, exist_ok=True)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    os.makedirs(settings.STORAGE_LOCAL_DIR, exist_ok=True)
+    seed_database()
+    yield
 
 app = FastAPI(
+    lifespan=lifespan,
     title=settings.PROJECT_NAME,
     description="Accuro — Production-grade multi-tenant web application for Indian CA firms. 'Accurate accounts. You review, Accuro does the rest.'",
     version=settings.VERSION,
