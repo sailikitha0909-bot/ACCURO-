@@ -18,7 +18,7 @@ export default function ClientPortalUploadPage() {
 
   useEffect(() => {
     if (!token) return;
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+    const API_BASE = "/api/v1";
     fetch(`${API_BASE}/portal/validate/${token}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -43,7 +43,7 @@ export default function ClientPortalUploadPage() {
       formData.append("files", files[i]);
     }
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+    const API_BASE = "/api/v1";
     try {
       const res = await fetch(`${API_BASE}/portal/upload/${token}`, {
         method: "POST",
