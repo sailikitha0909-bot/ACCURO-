@@ -1,0 +1,108 @@
+version: "3.8"
+
+services:
+  # 1. PostgreSQL Database
+  accuro-db:
+    image: postgres:16-alpine
+    container_name: accuro-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: accuro
+      POSTGRES_USER: accuro
+      POSTGRES_PASSWORD: accuro_secure_password_2025!
+    ports:
+      - "5432:5432"
+    volumes:
+      - accuro_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U accuro -d accuro"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Message Broker & Cache
+  accuro-redis:
+    image: redis:7-alpine
+    container_name: accuro-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - accuro_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 3. FastAPI Backend
+  accuro-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: accuro-backend
+    restart: unless-stopped
+    depends_on:
+      accuro-db:
+        condition: service_healthy
+      accuro-redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://accuro:accuro_secure_password_2025!@accuro-db:5432/accuro
+      REDIS_URL: redis://accuro-redis:6379/0
+      SECRET_KEY: accuro-production-grade-super-secret-key-32charsmin!
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_DIR: /app/storage
+      DPDP_FIELD_ENCRYPTION_KEY: accuro_dpdp_encryption_secret_key_32b!
+      ENVIRONMENT: production
+    ports:
+      - "8000:8000"
+    volumes:
+      - accuro_storage:/app/storage
+    command: >
+      sh -c "alembic upgrade head &&
+             python -c 'from app.db.seed_data import seed_database; seed_database()' &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  # 4. Background Processing Worker
+  accuro-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: accuro-worker
+    restart: unless-stopped
+    depends_on:
+      accuro-backend:
+        condition: service_started
+      accuro-redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://accuro:accuro_secure_password_2025!@accuro-db:5432/accuro
+      REDIS_URL: redis://accuro-redis:6379/0
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_DIR: /app/storage
+      DPDP_FIELD_ENCRYPTION_KEY: accuro_dpdp_encryption_secret_key_32b!
+      ENVIRONMENT: production
+    volumes:
+      - accuro_storage:/app/storage
+    command: python app/worker.py
+
+  # 5. Next.js Frontend
+  accuro-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: accuro-frontend
+    restart: unless-stopped
+    depends_on:
+      - accuro-backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://accuro-backend:8000/api/v1
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+
+volumes:
+  accuro_pgdata:
+  accuro_redisdata:
+  accuro_storage:
